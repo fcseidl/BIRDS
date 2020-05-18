@@ -52,11 +52,11 @@ if __name__ == "__main__":
       
       #### generate a linear transformation A; 
       #### A is determined by eigenvalues and eigenvectors
-      # Eigenvalues
       ##lams = asfarray([-0.05,-0.15])
+      # Eigenvalues
       lams = asarray([-0.05+.1j, -0.05-.1j])
-      #### mus like the letter mu; expectation?
       mus = exp(lams)
+      #### mus like the letter mu; expectation?
       # Eigenvectors #### (unit length?)
       V = randn(D,D)
       V /= sqrt(sum(V*V,0))[newaxis,:]
@@ -167,7 +167,7 @@ if __name__ == "__main__":
         n = Xk.shape[1]
         F[r:r+n,k] = mu**arange(n)  #### how can we know mu already?!?!?
         r += n
-      ## Kernel matrix: using squared exponential
+      ## Kernel matrix
       print("... building (unsigned) kernel ...")
       ##   Meta-parameter l = 1
       #K0 = exp(-Xdst/(2*0.1)) # fails

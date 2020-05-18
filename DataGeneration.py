@@ -3,10 +3,10 @@
 """
 Created on Wed May 13 09:41:40 2020
 
+@author: fcseidl
+
 Generate sample trajectories from real-valued dynamical systems of arbitrary 
 dimension.
-
-@author: fcseidl
 """
 
 import numpy as np
@@ -159,6 +159,7 @@ if __name__ == "__main__":
     traj = sys.observe(50)
     
     import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     ax.plot3D(traj[:, 0], traj[:, 1], traj[:, 2])

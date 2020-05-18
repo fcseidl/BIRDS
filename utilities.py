@@ -3,9 +3,9 @@
 """
 Created on Wed May 13 10:03:22 2020
 
-Various helper classes and functions for Koopman mode estimation.
-
 @author: fcseidl
+
+Various helper classes and functions for Koopman mode estimation.
 """
 
 import numpy as np

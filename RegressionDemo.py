@@ -14,22 +14,25 @@ from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import ExpSineSquared
 
 if __name__ == "__main__":
-    # sample randomly from sine curve on [-4pi, 4pi]
-    x = np.random.uniform(-4 * np.pi, 4 * np.pi, (50, 1))
-    y = np.sin(x)
+    N = 50
+    # sample randomly from sine and cosine curves on [-4pi, 4pi]
+    X = np.random.uniform(-4 * np.pi, 4 * np.pi, (N, 1))
+    Y = [ np.sin(X)[:, 0], np.cos(X)[:, 0] ]
+    Y = np.asarray(Y).T
 
     # run regression
     gpr = GaussianProcessRegressor(
             kernel=ExpSineSquared(),
             n_restarts_optimizer=15)
-    gpr.fit(x, y)
+    gpr.fit(X, Y)
     
     # predict function
-    x_pred = np.linspace(-8 * np.pi, 8 * np.pi, 101)[:, None]
-    y_pred = gpr.predict(x_pred)
+    X_pred = np.linspace(-8 * np.pi, 8 * np.pi, 101)[:, None]
+    Y_pred = gpr.predict(X_pred)
     
     # plot
-    plt.scatter(x, y, color="black")
-    plt.plot(x_pred, y_pred)
+    plt.scatter(X, Y[:, 0], color="r")
+    plt.scatter(X, Y[:, 1], color="b")
+    plt.plot(X_pred, Y_pred[:, 0], color="r")
+    plt.plot(X_pred, Y_pred[:, 1], color="b")
     plt.show()
-        

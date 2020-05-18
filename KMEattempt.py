@@ -3,14 +3,10 @@
 """
 Created on Mon May  2 18:45:43 2016
 
-@author: shrevz
+@author: fcseidl
 
-Using (naive) Gaussian Process estimator to compute linearizing observable for
-a system whose trajectories can be observed.
-
-@modified: fcseidl, May 2020
-
-Now featuring hyperparameter selection.
+Using Gaussian Process regression to for Koopman Mode Estimation. Technique is 
+from https://arxiv.org/pdf/1911.01143.pdf.
 """
 
 import numpy as np
@@ -28,7 +24,7 @@ if __name__ == "__main__":
     
     sys = DynamicalSystem(M)
     # compute trajectory
-    traj = sys.observe(N).T
+    traj = sys.observe(N)
     # training input
     Z = [ np.concatenate(traj[i:i + p]) for i in range(N - p) ]
     Z = np.asarray(Z)
