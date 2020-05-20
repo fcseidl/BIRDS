@@ -14,7 +14,7 @@ import sklearn.gaussian_process as gp
 from scipy import linalg
 
 
-def masuda(Y, p=1, predict=False):
+def masuda(Y, p=1, internals=False):
     r"""
     Params
     ------
@@ -25,8 +25,8 @@ def masuda(Y, p=1, predict=False):
         Number of previous observations used to predict next observation.
         Input-output pairs used in training data are of the form (z_k, y_k),
         where z_k = [ y_k-p, y_k-p+1, ..., y_k-1 ].
-    predict=False : bool, optional
-        Whether or not to return trained Gaussian process estimator.
+    internals=False : bool, optional
+        Whether or not to return additional internal features.
     
     Returns
     -------
@@ -37,8 +37,11 @@ def masuda(Y, p=1, predict=False):
         modes[j] is the mode corresponding to the growth rate lams[j]. These 
         are called Ritz vectors.
     gpr : sklearn.gaussian_process.GaussianProcessRegressor
-        Estimator which predicts y_k from input z_k. Returned only if predict 
+        Estimator which predicts y_k from input z_k. Returned only if internals 
         is True.
+    Tgp_inv : array
+        Inverse of Vandermonde matrix. Columns are eigenvectors of companion 
+        matrix Cgp. Returned only if internals is True.
     """
     Y = np.atleast_2d(Y)
     # number of observations N
@@ -55,7 +58,7 @@ def masuda(Y, p=1, predict=False):
     K = gp.kernels.ConstantKernel() * gp.kernels.RBF() \
             + gp.kernels.ConstantKernel() * gp.kernels.WhiteKernel()
     # run regression
-    gpr = gp.GaussianProcessRegressor(kernel=K)
+    gpr = gp.GaussianProcessRegressor(kernel=K, n_restarts_optimizer=10)
     gpr.fit(train_in, train_out)
     # Ggp in |R^M x (N-p) holds predicted mean values of [ y_p, ..., y_N-1 ].
     Ggp = gpr.predict(train_in).T
@@ -71,18 +74,16 @@ def masuda(Y, p=1, predict=False):
     lams, Tgp_inv = linalg.eig(Cgp)   # Vandermonde matrix Tgp is Tgp_inv^-1
     Vgp = Ggp.dot(Tgp_inv)
     modes = Vgp.T
-    if predict:
-        return lams, modes, gpr
+    if internals:
+        return lams, modes, gpr, Tgp_inv
     return lams, modes
-    
-    
 
 
 if __name__ == "__main__":
     from DataGeneration import DynamicalSystem
     M = 2   # dimension
-    N = 15
-    p = 3
+    N = 60
+    p = 13
     sys = DynamicalSystem(M)
     traj = sys.observe(N)
-    print(masuda(traj, p, predict=True))
+    print(masuda(traj, p))

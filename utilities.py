@@ -11,7 +11,6 @@ Various helper classes and functions for Koopman mode estimation.
 import numpy as np
 import sklearn.gaussian_process as gp
 
-
 def kron_delta(i, j):
     r"""
     Kronecker delta.
@@ -43,3 +42,32 @@ class KronKernel(gp.kernels.StationaryKernelMixin, gp.kernels.Kernel):
     
     def diag(self, X):
         return np.zeros((X.shape())) + 1
+
+
+from scipy.optimize import minimize
+
+def get_delta(a, b):
+    """
+    Find minimal delta for which |a-b| <= |a/e^delta - a|
+    """
+    diff = np.abs(a - b)
+    obj = lambda x : np.abs( np.abs(a / np.e**x - a) - diff)
+    return minimize(obj, 0.5, bounds=[(0, None)]).x[0]
+        
+print(get_delta(15 + 1j, 15 - 1j))
+
+
+# parameters
+n = 50
+scale = 10
+# generate random complex numbers with mean 0
+Z = np.random.rand(n) + np.random.rand(n) * 1j
+Z *= scale
+Z -= sum(Z) / n
+# any counterexamples?
+for a in Z:
+    for b in Z:
+        if np.abs(np.log(b/a)) > get_delta(a, b) + 0.0001:
+            print(a, b)
+            assert(False)
+print("good!")

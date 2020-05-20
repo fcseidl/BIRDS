@@ -12,6 +12,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import ExpSineSquared
+from scipy.optimize import minimize
+
 
 if __name__ == "__main__":
     N = 50

@@ -5,53 +5,99 @@ Created on Mon May  2 18:45:43 2016
 
 @author: fcseidl
 
-Using Gaussian Process regression to for Koopman Mode Estimation. Technique is 
+Using Gaussian Process regression for Koopman Mode Estimation. Technique is 
 from https://arxiv.org/pdf/1911.01143.pdf.
 """
 
-import numpy as np
-import sklearn.gaussian_process as gp
-from DataGeneration import DynamicalSystem
-    
+from scipy.optimize import minimize
+
+def get_delta(a, b):
+    """
+    Find minimal delta for which |a - b| <= |a/e^delta - a|
+    """
+    # normalize a and b
+    c = (a + b) / 2
+    a /= c
+    b /= c
+    # now find delta
+    diff = np.abs(a - b)
+    obj = lambda x : np.abs( np.abs(a / np.e**x - a) - diff)
+    return minimize(obj, 0.5, bounds=[(0, None)]).x[0]
+
 
 if __name__ == "__main__":
-    # dimension
-    M = 2
-    # number of observations
-    N = 15
-    # predict y_n from [y_(n-p), ..., y_(n-1)]
-    p = 3
+    import numpy as np
+    from scipy import linalg
+    import sklearn.gaussian_process as gp
+    from DataGeneration import DynamicalSystem
+    from MasudaDMD import masuda
+    import matplotlib.pyplot as plt
     
-    sys = DynamicalSystem(M)
-    # compute trajectory
+    M = 3 # dimension
+    
+    '''
+    mus = np.exp(np.asarray([-0.05+.1j, -0.05-.1j]))
+    # Eigenvectors
+    V = np.random.randn(M,M)
+    V /= np.sqrt(sum(V*V,0))[np.newaxis,:]
+    # Matrix from eigenvalues and eigenvectors
+    if all(mus == mus.real):
+        A = np.dot(linalg.inv(V),mus[:,np.newaxis]*V)
+    else:
+        mr = mus[0].real
+        mi = mus[0].imag
+        A0 = np.asarray([[mr, mi],[-mi, mr]])
+        A = np.dot(linalg.inv(V),np.dot(A0,V))
+    '''
+    
+    # get sample trajectory from random dynamical system
+    N = 40
+    sys = DynamicalSystem(M, seed=3)
+    #sys = DynamicalSystem(M, A=A)
     traj = sys.observe(N)
-    # training input
-    Z = [ np.concatenate(traj[i:i + p]) for i in range(N - p) ]
-    Z = np.asarray(Z)
-    # training output
-    Y = traj[p:]
+    if M == 2:
+        plt.plot(traj[:, 0], traj[:, 1])
+        plt.show()
+    if M == 3:
+        from mpl_toolkits.mplot3d import Axes3D
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot3D(traj[:, 0], traj[:, 1], traj[:, 2])
+        plt.show()
     
-    # compute scaling parameters and rescale training data
-    s = np.zeros((M * p,))
-    for i in range(M * p):
-        s[i] = max(Z[:, i])
-        Z[:, i] *= s[i]
-    ss = np.zeros((M,))
-    for i in range(M):
-        ss[i] = max(Y[:, i])
-        Y[:, i] *= ss[i]
+    # estimate modes and growth rates
+    lams, modes, gpr, Tgp_inv = masuda(traj, internals=True)
     
-    # compute intertask covariance matrix Kg
-    Kg = np.zeros((M, M))
-    for i in range(M):
-        Kg[i][i] = ss[i] ** -1
+    # estimate dynamic map F:|R^M -> |R^M. TODO: so far only works for p = 1
+    F = lambda x : gpr.predict(np.atleast_2d(x))
+    # estimate matrix observable f(x_0) = [ x_0, ..., x_N-1 ]^T
+    def f(x):
+        result = [[x]]
+        while len(result) < N - 1:
+            result.append(F(result[-1]))
+        return np.asarray(result)[:, 0]
+    # an approximate eigenfunction
+    psi = lambda i, x : Tgp_inv[:, i].dot(f(x)[:, 0])
     
-    # create Gaussian kernel
-    ker = (gp.kernels.ConstantKernel() * gp.kernels.RBF() 
-            + gp.kernels.WhiteKernel())
-    
-    # perform fit
-    gpr = gp.GaussianProcessRegressor(kernel=ker)
-    gpr.fit(Z, Y)  
-    
+    # measure how well estimate performed
+    print("\nEstimated eigenfunction psi appears to be in the", 
+          "(lambda, |Upsi/e^delta - Upsi|)-pseudospectrum.")
+    print("delta\t\t\t\tlambda")
+    for i in range(N - 1):
+        residuals = []
+        deltas = []
+        ratios = []
+        psi_i = psi(i, traj[0])
+        for j in range(N - 1):
+            Upsi = psi(i, traj[i + 1])     # Koopman operator applied to psi
+            residuals.append( np.abs( Upsi - lams[i] * psi_i ) )
+            deltas.append(get_delta(Upsi, lams[i] * psi_i))
+            ratios.append(lams[i] * psi_i / Upsi)
+            if np.abs(np.log(lams[i] * psi_i / Upsi)) > deltas[-1] + 0.001:
+                assert(False)
+            psi_i = Upsi
+        #print("residuals:\n", residuals)
+        #print("ratios:\n", ratios)
+        #print("deltas:\n", deltas)
+        print(max(deltas), "\t\t", lams[i])
     
