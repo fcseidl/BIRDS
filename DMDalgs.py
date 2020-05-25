@@ -11,9 +11,11 @@ Various functions for Dynamic Mode Decomposition (DMD).
 import numpy as np
 import sklearn.gaussian_process as gp
 from scipy import linalg
+from scipy.optimize import basinhopping
+import utilities as util
 
 
-def arnoldi(C, K, internals=False):
+def arnoldi(C, K):
     r"""
     Params
     ------
@@ -26,16 +28,15 @@ def arnoldi(C, K, internals=False):
     -------
     lams : array
         Ritz values.
-    modes : array
-        The column modes[:, i] is the Ritz vector corresponding to lams[i].
+    V : array
+        The column V[:, i] is the Ritz vector corresponding to lams[i].
     T_inv : array
         Inverse of Vandermonde matrix. Columns are eigenvectors of companion 
-        matrix C.   
+        matrix C.  
     """
     lams, T_inv = linalg.eig(C)   # Vandermonde matrix Tgp is Tgp_inv^-1
-    Vgp = K.dot(T_inv)
-    modes = Vgp
-    return lams, modes, T_inv
+    V = K.dot(T_inv)
+    return lams, V, T_inv
 
 
 def masudaDMD(Y, p=1):
@@ -58,8 +59,8 @@ def masudaDMD(Y, p=1):
     lams : array
         N - p approximate eigenvalues of Koopman operator U. These are called 
         Ritz values.
-    modes : array
-        modes[:, j] is the mode corresponding to the growth rate lams[j]. These 
+    Vgp : array
+        Vgp[:, j] is the mode corresponding to the growth rate lams[j]. These 
         are called Ritz vectors.
     gpr : sklearn.gaussian_process.GaussianProcessRegressor
         Estimator which predicts y_k from input z_k.
@@ -70,7 +71,6 @@ def masudaDMD(Y, p=1):
         Cgp[:, -1]
     """
     Y = np.atleast_2d(Y)
-    # number of observations N
     N = Y.shape[0]
     if N <= p:
         raise ValueError(
@@ -97,8 +97,8 @@ def masudaDMD(Y, p=1):
     for i in range(N - p - 1): Cgp[i + 1][i] = 1
     Cgp[:, -1] = cgp
     # call Arnoldi algorithm to get eigenvalues and modes
-    lams, modes, Tgp_inv = arnoldi(Cgp, Ggp)
-    return lams, modes, gpr, Tgp_inv, cgp
+    lams, Vgp, Tgp_inv = arnoldi(Cgp, Ggp)
+    return lams, Vgp, gpr, Tgp_inv, cgp
 
 
 def naiveProjectionDMD(Y):
@@ -124,13 +124,32 @@ def naiveProjectionDMD(Y):
         Inverse of Vandermonde matrix. Columns are eigenvectors of companion 
         matrix C.
     """
+    Y = np.atleast_2d(Y)
+    N = Y.shape[1]
+    c = np.zeros(N - 1)
+    # length of residual (c_0 * y_0 + ... + c_N-2 * y_N-2) - y_N-1
+    res = lambda x : linalg.norm(np.dot(Y[:, :-1], x) - Y[:, -1])
+    # coeffs of projection c = [c_0 ... c_N-2]
+    callback = lambda x, f, accept : util.close(f, 0) and accept
+    c = basinhopping(res, c, callback=callback).x
+    # Companion matrix
+    C = np.zeros((N - 1, N - 1))
+    for i in range(N - 2): C[i + 1][i] = 1
+    C[:, -1] = c
+    # call Arnoldi algorithm to get eigenvalues and modes
+    return arnoldi(C, Y[:, :-1])
 
 
 if __name__ == "__main__":
-    from DataGeneration import DynamicalSystem
-    M = 2   # dimension
-    N = 60
-    p = 13
-    sys = DynamicalSystem(M)
-    traj = sys.observe(N)
-    print(masuda(traj, p))
+    M = 20
+    N = 15
+    rng = np.random.RandomState(0)
+    A = rng.rand(M, M) * 5 - 2.5
+    x0 = rng.rand(M)
+    Y = np.zeros((M, N))
+    Y[:, 0] = x0
+    for i in range(1, N):
+        Y[:, i] = A.dot(Y[:, i - 1])
+    lams, V, T_inv = naiveProjectionDMD(Y)
+    print(lams)
+    print(linalg.eig(A)[0])

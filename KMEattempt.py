@@ -9,29 +9,17 @@ Using Gaussian Process regression for Koopman Mode Estimation. Technique is
 from https://arxiv.org/pdf/1911.01143.pdf.
 """
 
-from scipy.optimize import minimize
-
-def get_delta(a, b):
-    """
-    Find minimal delta for which |a - b| <= |a/e^delta - a|
-    """
-    # normalize a and b
-    c = (a + b) / 2
-    a /= c
-    b /= c
-    # now find delta
-    diff = np.abs(a - b)
-    obj = lambda x : np.abs( np.abs(a / np.e**x - a) - diff)
-    return minimize(obj, 0.5, bounds=[(0, None)]).x[0]
-
 
 if __name__ == "__main__":
     import numpy as np
     from scipy import linalg
     import sklearn.gaussian_process as gp
     from DataGeneration import DynamicalSystem
-    from MasudaDMD import masuda
+    import DMDalgs
     import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+    from scipy.optimize import minimize
+    import utilities as util
     
     M = 3 # dimension
     
@@ -51,53 +39,83 @@ if __name__ == "__main__":
     '''
     
     # get sample trajectory from random dynamical system
-    N = 40
-    sys = DynamicalSystem(M, seed=3)
+    N = 50
+    p = 1
+    sys = DynamicalSystem(M, seed=6, sig=0)
     #sys = DynamicalSystem(M, A=A)
     traj = sys.observe(N)
+    
+    '''
     if M == 2:
         plt.plot(traj[:, 0], traj[:, 1])
         plt.show()
     if M == 3:
-        from mpl_toolkits.mplot3d import Axes3D
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
         ax.plot3D(traj[:, 0], traj[:, 1], traj[:, 2])
         plt.show()
+    '''
     
     # estimate modes and growth rates
-    lams, modes, gpr, Tgp_inv = masuda(traj, internals=True)
+    #lams, modes, gpr, T_inv, c = DMDalgs.masudaDMD(traj, p=p)
+    lams, modes, T_inv = DMDalgs.naiveProjectionDMD(traj)
     
-    # estimate dynamic map F:|R^M -> |R^M. TODO: so far only works for p = 1
-    F = lambda x : gpr.predict(np.atleast_2d(x))
-    # estimate matrix observable f(x_0) = [ x_0, ..., x_N-1 ]^T
+    # estimate dynamic map T:|R^M -> |R^M. TODO: so far only works for p = 1
+    #T = lambda x : gpr.predict(x)
+    T = lambda x : sys.fwd(np.dot(sys.A, sys.rvs(x)[0]))
+    # estimate matrix observable f(x_0) = [ x_0, ..., x_N-2 ]^T
     def f(x):
-        result = [[x]]
-        while len(result) < N - 1:
-            result.append(F(result[-1]))
+        result = [np.asarray([x])]
+        while len(result) < N - p:
+            result.append(T(result[-1]))
         return np.asarray(result)[:, 0]
-    # an approximate eigenfunction
-    psi = lambda i, x : Tgp_inv[:, i].dot(f(x)[:, 0])
+    # an approximate eigenfunction in eigenspace of lams[i]
+    psi_i = lambda i, x : T_inv[:, i].dot(f(x)[:, 0])
     
-    # measure how well estimate performed
-    print("\nEstimated eigenfunction psi appears to be in the", 
-          "(lambda, |Upsi/e^delta - Upsi|)-pseudospectrum.")
-    print("delta\t\t\t\tlambda")
-    for i in range(N - 1):
-        residuals = []
+    
+    # graph of psi_i
+    i = 14
+    time = []
+    res = []
+    mag = []
+    psi = psi_i(i, traj[0])
+    for t in range(N - 1):
+        Upsi = psi_i(i, traj[t + 1])
+        time.append(t)
+        res.append(np.abs(Upsi - lams[i] * psi))
+        mag.append(np.abs(psi))
+        psi = Upsi
+    
+    fig, ax1 = plt.subplots()
+    
+    color = 'b'
+    ax1.set_ylim(bottom=0, top=1.2*max(max(mag), max(res)))
+    ax1.set_xlabel("time step")
+    ax1.set_ylabel("magnitude of eigenfunction",
+                   color=color)
+    ax1.plot(time, mag, color=color)
+    ax1.tick_params(axis='y', labelcolor=color)
+    
+    color = 'r'
+    ax2 = ax1.twinx()
+    ax2.set_ylim(ax1.get_ylim())
+    ax2.set_ylabel("magnitude of residual", color=color)
+    ax2.plot(time, res, color=color)
+    ax2.tick_params(axis='y', labelcolor=color)
+    
+    fig.tight_layout()
+    plt.show()
+        
+    
+    # performance readout
+    print("i\t\t\t\tdelta\t\t\t\tlambda\t\t\t\t|lambda|")
+    for i in range(N - 1):  # index of eigenvalue
         deltas = []
-        ratios = []
-        psi_i = psi(i, traj[0])
-        for j in range(N - 1):
-            Upsi = psi(i, traj[i + 1])     # Koopman operator applied to psi
-            residuals.append( np.abs( Upsi - lams[i] * psi_i ) )
-            deltas.append(get_delta(Upsi, lams[i] * psi_i))
-            ratios.append(lams[i] * psi_i / Upsi)
-            if np.abs(np.log(lams[i] * psi_i / Upsi)) > deltas[-1] + 0.001:
-                assert(False)
-            psi_i = Upsi
-        #print("residuals:\n", residuals)
-        #print("ratios:\n", ratios)
-        #print("deltas:\n", deltas)
-        print(max(deltas), "\t\t", lams[i])
+        psi = psi_i(i, traj[0])
+        for time in range(N - 1):
+            Upsi = psi_i(i, traj[time + 1])   # Koop op on psi
+            delta = np.abs(np.log(lams[i] * psi / Upsi))
+            deltas.append(delta)
+            psi = Upsi
+        print(i, "\t", max(deltas), "\t", lams[i], "\t", np.abs(lams[i]))
     
