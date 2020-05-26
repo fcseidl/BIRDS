@@ -21,9 +21,9 @@ if __name__ == "__main__":
     from scipy.optimize import minimize
     import utilities as util
     
-    M = 3 # dimension
+    M = 2 # dimension
     
-    '''
+    
     mus = np.exp(np.asarray([-0.05+.1j, -0.05-.1j]))
     # Eigenvectors
     V = np.random.randn(M,M)
@@ -36,14 +36,14 @@ if __name__ == "__main__":
         mi = mus[0].imag
         A0 = np.asarray([[mr, mi],[-mi, mr]])
         A = np.dot(linalg.inv(V),np.dot(A0,V))
-    '''
+    
     
     # get sample trajectory from random dynamical system
     N = 70
     p = 15  # p for masuda
-    pp = 25 # p for sophist
-    sys = DynamicalSystem(M, seed=0, sig=0)
-    #sys = DynamicalSystem(M, A=A)
+    pp = 20 # p for sophist
+    #sys = DynamicalSystem(M, seed=1, sig=1e-6)
+    sys = DynamicalSystem(M, A=A, sig=1e-6)
     traj = sys.observe(N)
     
     '''
@@ -65,31 +65,54 @@ if __name__ == "__main__":
     k = len(lams)
     
     # estimate dynamic map T:|R^M -> |R^M. TODO: so far only works for p = 1
-    #T = lambda X : gpr.predict(X)
     T = lambda X : sys.fwd(np.dot(sys.A, sys.rvs(X)))
+    # TODO: this currently uses hidden information. Could approximate T with 
+    # supervised learning.
+    
+    task = 2 % M   # arbitrary
     
     # estimate matrix observable f(x_0) = [ x_0, ..., x_k-1 ]
     def f(X):
-        X = np.atleast_2d(X)
-        result = [X]
+        """
+        Params
+        ------
+        X : array
+            Data matrix [ x_0, ... x_l ]
+        
+        Returns
+        -------
+        result : array
+            such that result[i] = f_tilde(X[:, i]) in |R^k
+        Xk : array
+            Data matrix after k application of T,
+            [ T^k(x_0), ..., T^k(x_l) ]
+        """
+        Xk = np.atleast_2d(X)
+        result = []
         while len(result) < k:
-            result.append(T(result[-1]))
-        return np.asarray(result).T
+            result.append(Xk[task])
+            Xk = T(Xk)
+        return np.asarray(result).T, Xk
     
     # an approximate eigenfunction in eigenspace of lams[i]
-    task = 1   # arbitrary
     def psi_i(i, X):
+        """
+        Apply psi_i to columns of X.
+        """
         X = np.atleast_2d(X)
-        F = f(X)
-        return np.dot(F[:, task], T_inv[:, i])
+        F, _ = f(X)
+        return np.dot(F, T_inv[:, i])
         
     # residual (error) of psi_i
     def res_i(i, X):
+        """
+        Apply res_i to columns of X.
+        """
         X = np.atleast_2d(X)
-        F = f(X)
-        fk = T(F[:, :, -1].T)
+        F, Xk = f(X)
+        fk = Xk[task]
         # e_k-1(f^k - c dot f)
-        return T_inv[i, -1] * (fk[task] - np.dot(F[:, task], c))
+        return T_inv[-1][i] * (fk - np.dot(F, c))
     
     '''
     i = 0
@@ -110,18 +133,18 @@ if __name__ == "__main__":
         # residual graph
         mag = np.abs(psi)
         res = np.abs(Upsi - lams[i] * psi)
-        res_pred = np.abs(res_i(i, traj[:, :-1]))
+        #res_pred = np.abs(res_i(i, traj[:, :-1]))
         time = np.linspace(0, N - 2, N - 1)
         
         fig, ax = plt.subplots()
         fig.suptitle("eigenfunction %s, eigenvalue %s" % (i, lams[i]))
         
-        ax.set_ylim(bottom=0, top=1.2*max(max(mag), max(res)))
+        ax.set_ylim(bottom=0, top=1.2*max([max(mag), max(res), util.eps]))
         ax.set_xlabel("time step")
         ax.plot(time, mag, color='b', label="magnitude")
         ax.plot(time, res, color='r', label="residual magnitude")
-        ax.plot(time, res_pred, color='g', 
-                label="predicted residual magnitude")
+        #ax.plot(time, res_pred, color='g', 
+         #       label="predicted residual magnitude")
         
         leg = plt.legend(
                 loc="best", ncol=2, mode="expand", shadow=True, fancybox=True)

@@ -177,7 +177,7 @@ def sophisticatedProjectionDMD(Y, p=15):
     c = basinhopping(res, c, callback=callback).x
     # Companion matrix
     C = np.zeros((p, p))
-    print("residual from sophisticated projection:", res(c))
+    print("minimized norm from sophisticated projection =", res(c))
     for i in range(p - 1): C[i + 1][i] = 1
     C[:, -1] = c
     # call Arnoldi algorithm to get eigenvalues and modes
