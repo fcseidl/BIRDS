@@ -39,9 +39,10 @@ if __name__ == "__main__":
     '''
     
     # get sample trajectory from random dynamical system
-    N = 50
-    p = 1
-    sys = DynamicalSystem(M, seed=6, sig=0)
+    N = 70
+    p = 15  # p for masuda
+    pp = 25 # p for sophist
+    sys = DynamicalSystem(M, seed=0, sig=0)
     #sys = DynamicalSystem(M, A=A)
     traj = sys.observe(N)
     
@@ -56,60 +57,83 @@ if __name__ == "__main__":
         plt.show()
     '''
     
-    # estimate modes and growth rates
-    #lams, modes, gpr, T_inv, c = DMDalgs.masudaDMD(traj, p=p)
-    lams, modes, T_inv = DMDalgs.naiveProjectionDMD(traj)
+    print("...estimating modes and growth rates...")
+    #lams, modes, gpr, T_inv, C = DMDalgs.masudaDMD(traj.T, p=p)
+    #lams, modes, T_inv, C = DMDalgs.naiveProjectionDMD(traj)
+    lams, modes, T_inv, C = DMDalgs.sophisticatedProjectionDMD(traj, p=pp)
+    c = C[:, -1]
+    k = len(lams)
     
     # estimate dynamic map T:|R^M -> |R^M. TODO: so far only works for p = 1
-    #T = lambda x : gpr.predict(x)
-    T = lambda x : sys.fwd(np.dot(sys.A, sys.rvs(x)[0]))
-    # estimate matrix observable f(x_0) = [ x_0, ..., x_N-2 ]^T
-    def f(x):
-        result = [np.asarray([x])]
-        while len(result) < N - p:
+    #T = lambda X : gpr.predict(X)
+    T = lambda X : sys.fwd(np.dot(sys.A, sys.rvs(X)))
+    
+    # estimate matrix observable f(x_0) = [ x_0, ..., x_k-1 ]
+    def f(X):
+        X = np.atleast_2d(X)
+        result = [X]
+        while len(result) < k:
             result.append(T(result[-1]))
-        return np.asarray(result)[:, 0]
+        return np.asarray(result).T
+    
     # an approximate eigenfunction in eigenspace of lams[i]
-    psi_i = lambda i, x : T_inv[:, i].dot(f(x)[:, 0])
+    task = 1   # arbitrary
+    def psi_i(i, X):
+        X = np.atleast_2d(X)
+        F = f(X)
+        return np.dot(F[:, task], T_inv[:, i])
+        
+    # residual (error) of psi_i
+    def res_i(i, X):
+        X = np.atleast_2d(X)
+        F = f(X)
+        fk = T(F[:, :, -1].T)
+        # e_k-1(f^k - c dot f)
+        return T_inv[i, -1] * (fk[task] - np.dot(F[:, task], c))
     
-    
-    # graph of psi_i
-    i = 14
-    time = []
-    res = []
-    mag = []
+    '''
+    i = 0
     psi = psi_i(i, traj[0])
     for t in range(N - 1):
         Upsi = psi_i(i, traj[t + 1])
-        time.append(t)
-        res.append(np.abs(Upsi - lams[i] * psi))
-        mag.append(np.abs(psi))
-        psi = Upsi
+        actual = Upsi - lams[i] * psi
+        expect = res_i(i, traj[t])
+        # TODO: why is actual so much bigger than expect?!?!?
+        2 + 2   # dummy line
+    '''
     
-    fig, ax1 = plt.subplots()
-    
-    color = 'b'
-    ax1.set_ylim(bottom=0, top=1.2*max(max(mag), max(res)))
-    ax1.set_xlabel("time step")
-    ax1.set_ylabel("magnitude of eigenfunction",
-                   color=color)
-    ax1.plot(time, mag, color=color)
-    ax1.tick_params(axis='y', labelcolor=color)
-    
-    color = 'r'
-    ax2 = ax1.twinx()
-    ax2.set_ylim(ax1.get_ylim())
-    ax2.set_ylabel("magnitude of residual", color=color)
-    ax2.plot(time, res, color=color)
-    ax2.tick_params(axis='y', labelcolor=color)
-    
-    fig.tight_layout()
-    plt.show()
+    for i in range(k):
+        vals = psi_i(i, traj)
+        psi = vals[:-1]     # psi at each point except final
+        Upsi = vals[1:]     # Koop op applied to psi
         
+        # residual graph
+        mag = np.abs(psi)
+        res = np.abs(Upsi - lams[i] * psi)
+        res_pred = np.abs(res_i(i, traj[:, :-1]))
+        time = np.linspace(0, N - 2, N - 1)
+        
+        fig, ax = plt.subplots()
+        fig.suptitle("eigenfunction %s, eigenvalue %s" % (i, lams[i]))
+        
+        ax.set_ylim(bottom=0, top=1.2*max(max(mag), max(res)))
+        ax.set_xlabel("time step")
+        ax.plot(time, mag, color='b', label="magnitude")
+        ax.plot(time, res, color='r', label="residual magnitude")
+        ax.plot(time, res_pred, color='g', 
+                label="predicted residual magnitude")
+        
+        leg = plt.legend(
+                loc="best", ncol=2, mode="expand", shadow=True, fancybox=True)
+        leg.get_frame().set_alpha(0.5)
+        
+        fig.tight_layout()
+        plt.show()
     
+    '''    
     # performance readout
     print("i\t\t\t\tdelta\t\t\t\tlambda\t\t\t\t|lambda|")
-    for i in range(N - 1):  # index of eigenvalue
+    for i in range(k):  # index of eigenvalue
         deltas = []
         psi = psi_i(i, traj[0])
         for time in range(N - 1):
@@ -118,4 +142,5 @@ if __name__ == "__main__":
             deltas.append(delta)
             psi = Upsi
         print(i, "\t", max(deltas), "\t", lams[i], "\t", np.abs(lams[i]))
+    '''
     

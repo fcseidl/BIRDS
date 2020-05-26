@@ -36,7 +36,7 @@ def arnoldi(C, K):
     """
     lams, T_inv = linalg.eig(C)   # Vandermonde matrix Tgp is Tgp_inv^-1
     V = K.dot(T_inv)
-    return lams, V, T_inv
+    return lams, V, T_inv, C
 
 
 def masudaDMD(Y, p=1):
@@ -97,8 +97,8 @@ def masudaDMD(Y, p=1):
     for i in range(N - p - 1): Cgp[i + 1][i] = 1
     Cgp[:, -1] = cgp
     # call Arnoldi algorithm to get eigenvalues and modes
-    lams, Vgp, Tgp_inv = arnoldi(Cgp, Ggp)
-    return lams, Vgp, gpr, Tgp_inv, cgp
+    lams, Vgp, Tgp_inv, C = arnoldi(Cgp, Ggp)
+    return lams, Vgp, gpr, Tgp_inv, C
 
 
 def naiveProjectionDMD(Y):
@@ -109,8 +109,8 @@ def naiveProjectionDMD(Y):
     Params
     ------
     Y : array-like
-        A sequence of N M-task observations of a dynamical system, 
-        [ y_0, y_1, ..., y_N-1 ], y_i in |R^M
+        Data matrix of N M-task observations of a dynamical system, 
+        [ y_0, y_1, ..., y_N-1 ], y_i = Y[:, i] in |R^M
     
     Returns
     -------
@@ -140,10 +140,55 @@ def naiveProjectionDMD(Y):
     return arnoldi(C, Y[:, :-1])
 
 
+def sophisticatedProjectionDMD(Y, p=15):
+    r"""
+    Perform DMD obtaining final column of companion matrix as coefficients of 
+    projection of pth power of dynamic map onto previous p powers.
+    
+    Params
+    ------
+    Y : array-like
+        Data matrix of N M-task observations of a dynamical system, 
+        [ y_0, y_1, ..., y_N-1 ], y_i = Y[:, i] in |R^M
+    p=15 : integer, optional
+        Dimension of Krylov space to project onto.
+    
+    Returns
+    -------
+    lams : array
+        N - 1 approximate eigenvalues of Koopman operator U. These are called 
+        Ritz values.
+    modes : array
+        modes[:, j] is the mode corresponding to the growth rate lams[j]. These 
+        are called Ritz vectors.
+    T_inv : array
+        Inverse of Vandermonde matrix. Columns are eigenvectors of companion 
+        matrix C.
+    """
+    Y = np.atleast_2d(Y)
+    N = Y.shape[1]
+    c = np.zeros(p)
+    # error norm to minimize
+    truth = Y[:, p:].T
+    basis = [ Y[:, k:k+p] for k in range(N - p) ]
+    res = lambda x : linalg.norm(truth - np.dot(basis, x))
+    # coeffs of projection c = [c_0 ... c_N-2]
+    callback = lambda x, f, accept : util.close(f, 0) and accept
+    c = basinhopping(res, c, callback=callback).x
+    # Companion matrix
+    C = np.zeros((p, p))
+    print("residual from sophisticated projection:", res(c))
+    for i in range(p - 1): C[i + 1][i] = 1
+    C[:, -1] = c
+    # call Arnoldi algorithm to get eigenvalues and modes
+    # TODO: choice of Y[:, :p] is arbitrary; any p observations would do
+    return arnoldi(C, Y[:, :p])
+
+
 if __name__ == "__main__":
-    M = 20
-    N = 15
-    rng = np.random.RandomState(0)
+    M = 8
+    N = 10
+    rng = np.random.RandomState(1)
     A = rng.rand(M, M) * 5 - 2.5
     x0 = rng.rand(M)
     Y = np.zeros((M, N))
@@ -151,5 +196,11 @@ if __name__ == "__main__":
     for i in range(1, N):
         Y[:, i] = A.dot(Y[:, i - 1])
     lams, V, T_inv = naiveProjectionDMD(Y)
+    lams1, V1, T_inv1 = sophisticatedProjectionDMD(Y, p=N-4)
+    true = linalg.eig(A)[0]
+    lams.sort()
+    lams1.sort()
+    true.sort()
     print(lams)
-    print(linalg.eig(A)[0])
+    print(lams1)
+    print(true)
