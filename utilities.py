@@ -9,11 +9,30 @@ Various helper classes and functions for Koopman mode estimation.
 """
 
 import numpy as np
-import sklearn.gaussian_process as gp
-from scipy.optimize import minimize
+from scipy.stats import linregress
 
 eps = 1e-6
 
+
+def exponential_regression(x, y):
+    r"""
+    Params
+    ------
+    x, y : array-like
+        length-n arrays of x and y values.
+    
+    Returns
+    -------
+    a, b : numeric
+        such that ae^bx is the (least squares) exponential curve of best fit 
+        to x and y.
+    r2 : numeric
+        correlation coefficient (of linear regression to log data)
+    """
+    b, inter, r2, _, __ = linregress(x, np.log(y))
+    a = np.e ** inter
+    return a, b, r2
+    
 
 def proj(u, v):
     r"""
@@ -36,38 +55,3 @@ if __name__ == "__main__":
     print(proj(v, u))
     print(proj(u, u))
     print(proj(v, v))
-
-
-'''
-def kron_delta(i, j):
-    r"""
-    Kronecker delta.
-    """
-    if i == j:
-        return 1
-    return 0
-
-## TODO: is this any different from WhiteKernel?
-class KronKernel(gp.kernels.StationaryKernelMixin, gp.kernels.Kernel):
-    r"""
-    Returns cov(x, x') = Kronecker delta of x and x'. Overrides an abstract 
-    kernel class from sklearn.
-    """
-    
-    def __init__(self):
-        # no hyperparameters
-        pass
-    
-    def __call__(self, X, Y=None, eval_gradient=False):
-        if eval_gradient:
-            raise ValueError("Gradient of non-smooth kernel does not exist.")
-        X = np.atleast_2d(X)
-        if Y is None:
-            Y = X
-        Y = np.atleast_2d(Y)
-        return np.asarray([[ kron_delta(i, j) for i,j in zip(Xk, Yk) ]
-                            for Xk,Yk in zip(X,Y)])
-    
-    def diag(self, X):
-        return np.zeros((X.shape())) + 1
-'''

@@ -169,10 +169,13 @@ def sophisticatedProjectionDMD(Y, p=15):
     N = Y.shape[1]
     c = np.zeros(p)
     # error norm to minimize
+    # TODO: unweighted difference in norm biases against accuracy where state 
+    # vector is small. FIND IDEAL NORM
     truth = Y[:, p:].T
     basis = [ Y[:, k:k+p] for k in range(N - p) ]
+    #res = lambda x : linalg.norm((truth - np.dot(basis, x)) / truth)
     res = lambda x : linalg.norm(truth - np.dot(basis, x))
-    # coeffs of projection c = [c_0 ... c_N-2]
+    # minimize to obtain coeffs of projection c = [c_0 ... c_N-2]
     callback = lambda x, f, accept : util.close(f, 0) and accept
     c = basinhopping(res, c, callback=callback).x
     # Companion matrix

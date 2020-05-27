@@ -13,17 +13,17 @@ from https://arxiv.org/pdf/1911.01143.pdf.
 if __name__ == "__main__":
     import numpy as np
     from scipy import linalg
-    import sklearn.gaussian_process as gp
     from DataGeneration import DynamicalSystem
     import DMDalgs
     import matplotlib.pyplot as plt
     from mpl_toolkits.mplot3d import Axes3D
-    from scipy.optimize import minimize
+    from scipy.optimize import minimize, curve_fit
     import utilities as util
+    from sklearn.metrics import r2_score
     
     M = 2 # dimension
     
-    
+    '''
     mus = np.exp(np.asarray([-0.05+.1j, -0.05-.1j]))
     # Eigenvectors
     V = np.random.randn(M,M)
@@ -36,26 +36,15 @@ if __name__ == "__main__":
         mi = mus[0].imag
         A0 = np.asarray([[mr, mi],[-mi, mr]])
         A = np.dot(linalg.inv(V),np.dot(A0,V))
-    
+    '''
     
     # get sample trajectory from random dynamical system
-    N = 70
+    N = 50
     p = 15  # p for masuda
-    pp = 20 # p for sophist
-    #sys = DynamicalSystem(M, seed=1, sig=1e-6)
-    sys = DynamicalSystem(M, A=A, sig=1e-6)
+    pp = 10 # p for sophist
+    sys = DynamicalSystem(M, seed=3, sig=1e-6)
+    #sys = DynamicalSystem(M, A=A, sig=1e-6)
     traj = sys.observe(N)
-    
-    '''
-    if M == 2:
-        plt.plot(traj[:, 0], traj[:, 1])
-        plt.show()
-    if M == 3:
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.plot3D(traj[:, 0], traj[:, 1], traj[:, 2])
-        plt.show()
-    '''
     
     print("...estimating modes and growth rates...")
     #lams, modes, gpr, T_inv, C = DMDalgs.masudaDMD(traj.T, p=p)
@@ -114,27 +103,26 @@ if __name__ == "__main__":
         # e_k-1(f^k - c dot f)
         return T_inv[-1][i] * (fk - np.dot(F, c))
     
-    '''
-    i = 0
-    psi = psi_i(i, traj[0])
-    for t in range(N - 1):
-        Upsi = psi_i(i, traj[t + 1])
-        actual = Upsi - lams[i] * psi
-        expect = res_i(i, traj[t])
-        # TODO: why is actual so much bigger than expect?!?!?
-        2 + 2   # dummy line
-    '''
+    corcoeffs = []
     
     for i in range(k):
         vals = psi_i(i, traj)
         psi = vals[:-1]     # psi at each point except final
         Upsi = vals[1:]     # Koop op applied to psi
         
-        # residual graph
         mag = np.abs(psi)
         res = np.abs(Upsi - lams[i] * psi)
         #res_pred = np.abs(res_i(i, traj[:, :-1]))
         time = np.linspace(0, N - 2, N - 1)
+        
+        # exponential best fit
+        def fun(x, c1, c2):
+            return c1 * (np.abs(lams[i]) ** x) + c2
+        norm = linalg.norm(np.asarray(mag))
+        guess = (1, mag[0] / norm - 1)
+        params, _ = curve_fit(fun, time, mag / norm, guess)
+        fit = [ fun(t, *params) * norm for t in time ]
+        r2 = r2_score(mag, fit)
         
         fig, ax = plt.subplots()
         fig.suptitle("eigenfunction %s, eigenvalue %s" % (i, lams[i]))
@@ -143,6 +131,8 @@ if __name__ == "__main__":
         ax.set_xlabel("time step")
         ax.plot(time, mag, color='b', label="magnitude")
         ax.plot(time, res, color='r', label="residual magnitude")
+        ax.plot(time, fit, color='g', linestyle="dashed",
+                label=("exponential fit, r^2 = %s" % r2))
         #ax.plot(time, res_pred, color='g', 
          #       label="predicted residual magnitude")
         
@@ -152,6 +142,17 @@ if __name__ == "__main__":
         
         fig.tight_layout()
         plt.show()
+        corcoeffs.append(r2)
+    
+    fig, ax = plt.subplots()
+    fig.suptitle("Eigenvalues")
+    for i in range(k):
+        ax.scatter(lams[i].real, lams[i].imag, 
+                   color=(0, corcoeffs[i], 0))
+    ax.set_xlabel("real part")
+    ax.set_ylabel("imaginary part")
+    plt.show()
+    
     
     '''    
     # performance readout
