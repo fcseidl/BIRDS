@@ -21,7 +21,7 @@ if __name__ == "__main__":
     import utilities as util
     from sklearn.metrics import r2_score
     
-    M = 2 # dimension
+    M = 3 # dimension
     
     '''
     mus = np.exp(np.asarray([-0.05+.1j, -0.05-.1j]))
@@ -39,10 +39,10 @@ if __name__ == "__main__":
     '''
     
     # get sample trajectory from random dynamical system
-    N = 50
+    N = 60
     p = 15  # p for masuda
-    pp = 10 # p for sophist
-    sys = DynamicalSystem(M, seed=3, sig=1e-6)
+    pp = 15 # p for sophist
+    sys = DynamicalSystem(M, seed=1, sig=1e-6)
     #sys = DynamicalSystem(M, A=A, sig=1e-6)
     traj = sys.observe(N)
     
@@ -116,13 +116,14 @@ if __name__ == "__main__":
         time = np.linspace(0, N - 2, N - 1)
         
         # exponential best fit
-        def fun(x, c1, c2):
-            return c1 * (np.abs(lams[i]) ** x) + c2
+        def fun(x, a):
+            return a * (np.abs(lams[i]) ** x)
         norm = linalg.norm(np.asarray(mag))
-        guess = (1, mag[0] / norm - 1)
-        params, _ = curve_fit(fun, time, mag / norm, guess)
-        fit = [ fun(t, *params) * norm for t in time ]
+        a = [1]
+        a, _ = curve_fit(fun, time, mag / norm, a)
+        fit = [ fun(t, a[0]) * norm for t in time ]
         r2 = r2_score(mag, fit)
+        corcoeffs.append(r2)
         
         fig, ax = plt.subplots()
         fig.suptitle("eigenfunction %s, eigenvalue %s" % (i, lams[i]))
@@ -142,13 +143,13 @@ if __name__ == "__main__":
         
         fig.tight_layout()
         plt.show()
-        corcoeffs.append(r2)
+        
     
     fig, ax = plt.subplots()
     fig.suptitle("Eigenvalues")
     for i in range(k):
         ax.scatter(lams[i].real, lams[i].imag, 
-                   color=(0, corcoeffs[i], 0))
+                   color=(0, max(corcoeffs[i], 0), 0))
     ax.set_xlabel("real part")
     ax.set_ylabel("imaginary part")
     plt.show()
