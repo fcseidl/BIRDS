@@ -5,25 +5,24 @@ Created on Mon May  2 18:45:43 2016
 
 @author: fcseidl
 
-Using Gaussian Process regression for Koopman Mode Estimation. Technique is 
-from https://arxiv.org/pdf/1911.01143.pdf.
+Demonstrates Koopman eigenfunction estimation on simulated data.
 """
 
-
-if __name__ == "__main__":
-    import numpy as np
-    from scipy import linalg
-    from DataGeneration import DynamicalSystem
-    import DMDalgs
-    import matplotlib.pyplot as plt
-    from mpl_toolkits.mplot3d import Axes3D
-    from scipy.optimize import minimize, curve_fit
-    import utilities as util
-    from sklearn.metrics import r2_score
+import numpy as np
+from scipy import linalg
+from DataGeneration import DynamicalSystem
+import DMDalgs
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from scipy.optimize import minimize, curve_fit
+import utilities as util
+from sklearn.metrics import r2_score
     
+def example():
     M = 3 # dimension
     
     '''
+    # this fragment allows 2D eigenvalues to be user-specified
     mus = np.exp(np.asarray([-0.05+.1j, -0.05-.1j]))
     # Eigenvectors
     V = np.random.randn(M,M)
@@ -43,20 +42,20 @@ if __name__ == "__main__":
     p = 15  # p for masuda
     pp = 15 # p for sophist
     sys = DynamicalSystem(M, seed=1, sig=1e-6)
-    #sys = DynamicalSystem(M, A=A, sig=1e-6)
+    ##sys = DynamicalSystem(M, A=A, sig=1e-6)
     traj = sys.observe(N)
     
     print("...estimating modes and growth rates...")
-    #lams, modes, gpr, T_inv, C = DMDalgs.masudaDMD(traj.T, p=p)
-    #lams, modes, T_inv, C = DMDalgs.naiveProjectionDMD(traj)
+    ##lams, modes, gpr, T_inv, C = DMDalgs.masudaDMD(traj.T, p=p)
+    ##lams, modes, T_inv, C = DMDalgs.naiveProjectionDMD(traj)
     lams, modes, T_inv, C = DMDalgs.sophisticatedProjectionDMD(traj, p=pp)
     c = C[:, -1]
     k = len(lams)
     
-    # estimate dynamic map T:|R^M -> |R^M. TODO: so far only works for p = 1
+    # estimate dynamic map T:|R^M -> |R^M.
     T = lambda X : sys.fwd(np.dot(sys.A, sys.rvs(X)))
     # TODO: this currently uses hidden information. Could approximate T with 
-    # supervised learning.
+    # supervised learning...
     
     task = 2 % M   # arbitrary
     
@@ -100,7 +99,6 @@ if __name__ == "__main__":
         X = np.atleast_2d(X)
         F, Xk = f(X)
         fk = Xk[task]
-        # e_k-1(f^k - c dot f)
         return T_inv[-1][i] * (fk - np.dot(F, c))
     
     corcoeffs = []
@@ -112,7 +110,6 @@ if __name__ == "__main__":
         
         mag = np.abs(psi)
         res = np.abs(Upsi - lams[i] * psi)
-        #res_pred = np.abs(res_i(i, traj[:, :-1]))
         time = np.linspace(0, N - 2, N - 1)
         
         # exponential best fit
@@ -134,8 +131,6 @@ if __name__ == "__main__":
         ax.plot(time, res, color='r', label="residual magnitude")
         ax.plot(time, fit, color='g', linestyle="dashed",
                 label=("exponential fit, r^2 = %s" % r2))
-        #ax.plot(time, res_pred, color='g', 
-         #       label="predicted residual magnitude")
         
         leg = plt.legend(
                 loc="best", ncol=2, mode="expand", shadow=True, fancybox=True)
@@ -168,4 +163,7 @@ if __name__ == "__main__":
             psi = Upsi
         print(i, "\t", max(deltas), "\t", lams[i], "\t", np.abs(lams[i]))
     '''
+
+if __name__ == "__main__":
+    example()
     

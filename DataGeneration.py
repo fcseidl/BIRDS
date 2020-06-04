@@ -87,7 +87,7 @@ class DynamicalSystem:
     r"""
     Implements a smooth dynamical system whose trajectories can be observed.
     Trajectories are images of an underlying linear system under a 
-    polynomial.
+    polynomial diffeomorphism.
     """
     
     def __init__(self, D, A=None, seed=42, sig=1e-4):
